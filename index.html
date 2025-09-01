@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kaithi → Hindi Realtime Keyboard</title>
+  <style>
+    :root { --bg: #f7f7fb; --card: #fff; --ink: #111; --muted: #555; --ring: #e6e6ef; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--ink); }
+    header { padding: 12px 16px; text-align: center; }
+    h1 { margin: 0; font-size: 18px; }
+    main { max-width: 900px; margin: 0 auto; padding: 8px 12px; display: flex; flex-direction: column; gap: 12px; }
+    .panel { background: var(--card); border: 1px solid var(--ring); border-radius: 8px; box-shadow: 0 1px 6px rgba(0,0,0,.05); padding: 10px; }
+    .grid { display: flex; flex-direction: column; gap: 10px; }
+    label { font-weight: 600; font-size: 14px; margin-bottom: 6px; display: block; }
+    textarea {
+      width: 100%; min-height: 100px; border: 1px solid var(--ring); border-radius: 8px;
+      padding: 8px; font-size: 18px; line-height: 1.3; background: #fff; outline: none; resize: vertical;
+    }
+    .muted { color: var(--muted); font-size: 11px; margin-top: 4px; }
+
+    /* Keyboard */
+    .kbd { 
+      display: flex; 
+      flex-direction: column; 
+      gap: 4px; 
+      padding: 4px; 
+      width: 100%;
+    }
+    .row { 
+      display: flex; 
+      gap: 4px; 
+      justify-content: space-evenly; 
+      flex-wrap: nowrap; 
+      width: 100%;
+    }
+    .key {
+      flex: 1;
+      aspect-ratio: 1 / 1;   
+      max-height: 60px;
+      background: linear-gradient(135deg, #a1c4fd, #c2e9fb);
+      border: 1px solid #ccc;
+      border-radius: 50%;
+      display: flex; 
+      flex-direction: column;
+      align-items: center; 
+      justify-content: center;
+      cursor: pointer; 
+      user-select: none; 
+      font-size: clamp(12px, 2vw, 20px);
+      color: #222;
+      font-weight: 600;
+      box-shadow: 2px 2px 6px rgba(0,0,0,0.2), -2px -2px 6px rgba(255,255,255,0.7);
+      transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.3s ease;
+    }
+    .key:active {
+      transform: scale(0.95);
+      box-shadow: inset 2px 2px 6px rgba(0,0,0,0.25), inset -2px -2px 6px rgba(255,255,255,0.6);
+      background: linear-gradient(135deg, #89f7fe, #66a6ff);
+    }
+    .key .kaithi { font-size: 1em; line-height: 1; }
+    .key .hint { font-size: 0.55em; color: #333; line-height: 1; margin-top: 2px; }
+
+    /* Special keys */
+    .key.wide, .key.xwide {
+      flex: 1.5;
+      aspect-ratio: auto;
+      height: 40px;
+      border-radius: 12px;
+      font-size: clamp(10px, 1.8vw, 14px);
+      background: linear-gradient(135deg, #d7d2cc, #304352);
+      color: #fff;
+    }
+    .key.wide:active, .key.xwide:active {
+      background: linear-gradient(135deg, #396afc, #2948ff);
+    }
+
+    .toolbar { display: flex; gap: 6px; justify-content: center; padding: 8px; flex-wrap: wrap; }
+    .btn {
+      padding: 8px 12px; border: 1px solid var(--ring); background: #fff; border-radius: 8px;
+      cursor: pointer; font-weight: 600; font-size: 14px;
+    }
+    .legend { font-size: 11px; color: var(--muted); text-align: center; margin-top: 4px; }
+    footer { padding: 12px; text-align: center; color: #777; font-size: 11px; }
+
+    @media (orientation: landscape) {
+      body, html { height: 100%; overflow: hidden; }
+      .kbd { flex-direction: column; gap: 2px; padding: 2px; }
+      .row { justify-content: space-evenly; }
+    }
+  </style>
+</head>
+<body>
+  <header><h1>Kaithi → Hindi (Devanagari) Keyboard</h1></header>
+
+  <main>
+    <section class="panel grid">
+      <div>
+        <label>Kaithi में टाइप करें</label>
+        <textarea id="inKaithi" placeholder="Kaithi यहाँ लिखें…" inputmode="none" readonly></textarea>
+        <div class="muted">टाइप करने पर Hindi नीचे दिखेगा।</div>
+      </div>
+      <div>
+        <label>Hindi (Devanagari) आउटपुट</label>
+        <textarea id="outHindi" placeholder="Hindi यहाँ दिखेगा…" readonly></textarea>
+        <div class="muted">आउटपुट read-only; कॉपी कर सकते हैं।</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <button class="btn" id="btnClear">Clear</button>
+        <button class="btn" id="btnCopy">Copy Hindi</button>
+        <button class="btn" id="btnToggle">Enable Typing</button>
+      </div>
+      <div class="kbd" id="kbd"></div>
+      <div class="legend">Key: Kaithi (बड़ा) • Hindi (छोटा)</div>
+    </section>
+  </main>
+
+  <footer>Unicode Kaithi (U+11080–U+110CF) → Devanagari mapping.</footer>
+
+<script>
+const MAP = {
+  "𑂀":"ँ","𑂁":"ं","𑂂":"ः","𑂃":"अ","𑂄":"आ","𑂅":"इ","𑂆":"ई","𑂇":"उ","𑂈":"ऊ",
+  "𑂉":"ए","𑂊":"ऐ","𑂋":"ओ","𑂌":"औ","𑂍":"क","𑂎":"ख","𑂏":"ग","𑂐":"घ","𑂑":"ङ",
+  "𑂒":"च","𑂓":"छ","𑂔":"ज","𑂕":"झ","𑂖":"ञ","𑂗":"ट","𑂘":"ठ","𑂙":"ड","𑂚":"ढ़",
+  "𑂛":"ढ","𑂜":"ऱ","𑂝":"ण","𑂞":"त","𑂟":"थ","𑂠":"द","𑂡":"ध","𑂢":"न",
+  "𑂣":"प","𑂤":"फ","𑂥":"ब","𑂦":"भ","𑂧":"म","𑂨":"य","𑂩":"र","𑂪":"ल","𑂫":"व",
+  "𑂬":"श","𑂭":"ष","𑂮":"स","𑂯":"ह","𑂰":"ा","𑂱":"ि","𑂲":"ी","𑂳":"ु","𑂴":"ू",
+  "𑂵":"े","𑂶":"ै","𑂷":"ो","𑂸":"ौ","𑃂":"ृ","𑂹":"्","𑂺":"़","𑃀":"।","𑃁":"॥"
+};
+
+const KBD_ROWS = [
+  ["𑂃","𑂄","𑂅","𑂆","𑂇","𑂈","𑂉","𑂊","𑂋","𑂌"],
+  ["𑂍","𑂎","𑂏","𑂐","𑂑","𑂒","𑂓","𑂔","𑂕","𑂖"],
+  ["𑂗","𑂘","𑂙","𑂛","𑂝","𑂞","𑂟","𑂠","𑂡","𑂢"],
+  ["𑂣","𑂤","𑂥","𑂦","𑂧","𑂨","𑂩","𑂪","𑂫","𑂮"],
+  ["𑂬","𑂭","𑂯","𑂰","𑂱","𑂲","𑂳","𑂴","𑂵","𑂶"],
+  ["𑂷","𑂸","𑃂","𑂹","𑂺","𑂀","𑂁","𑂂","𑃀","𑃁"],
+  ["Tab","Space","Enter","Backspace"]
+];
+
+let systemKeyboardEnabled = false; // default off
+
+function kthiToDeva(str) {
+  let out = "";
+  for (const ch of str) {
+    out += (MAP[ch] ?? ch);
+  }
+  return out;
+}
+
+const inKaithi = document.getElementById('inKaithi');
+const outHindi = document.getElementById('outHindi');
+
+function sync() {
+  outHindi.value = kthiToDeva(inKaithi.value);
+}
+inKaithi.addEventListener('input', sync);
+
+const kbd = document.getElementById('kbd');
+function makeKey(sym) {
+  const d = document.createElement('div');
+  d.className = 'key' + (["Tab","Space","Enter","Backspace"].includes(sym) ? (sym==="Space"?" xwide":" wide") : "");
+  if (MAP[sym]) {
+    d.innerHTML = `<div class="kaithi">${sym}</div><div class="hint">${MAP[sym]}</div>`;
+    d.onclick = () => {
+      if (!systemKeyboardEnabled) insertAtCursor(inKaithi, sym);
+      sync();
+    };
+  } else if (["Tab","Space","Enter","Backspace"].includes(sym)) {
+    d.innerHTML = `<div class="kaithi">${sym}</div><div class="hint">${
+      sym==="Space"?"स्पेस":sym==="Tab"?"टैब":sym==="Enter"?"एंटर":"मिटाएँ"
+    }</div>`;
+    d.onclick = () => {
+      if (!systemKeyboardEnabled) {
+        if (sym === "Space") { insertAtCursor(inKaithi, " "); }
+        else if (sym === "Tab") { insertAtCursor(inKaithi, "\t"); }
+        else if (sym === "Enter") { insertAtCursor(inKaithi, "\n"); }
+        else if (sym === "Backspace") { backspaceAtCursor(inKaithi); }
+        sync();
+      }
+    };
+  } else {
+    d.textContent = sym;
+  }
+  return d;
+}
+function makeRow(arr) {
+  const r = document.createElement('div'); r.className = 'row';
+  arr.forEach(x => r.appendChild(makeKey(x)));
+  return r;
+}
+KBD_ROWS.forEach(row => kbd.appendChild(makeRow(row)));
+
+function insertAtCursor(el, text) {
+  el.removeAttribute("readonly");
+  const [start, end] = [el.selectionStart ?? el.value.length, el.selectionEnd ?? el.value.length];
+  const before = el.value.slice(0, start);
+  const after = el.value.slice(end);
+  el.value = before + text + after;
+  const pos = start + text.length;
+  el.setSelectionRange(pos, pos);
+  el.focus();
+  el.setAttribute("readonly", true);
+}
+function backspaceAtCursor(el) {
+  el.removeAttribute("readonly");
+  const [start, end] = [el.selectionStart ?? el.value.length, el.selectionEnd ?? el.value.length];
+  if (start !== end) {
+    const before = el.value.slice(0, start);
+    const after = el.value.slice(end);
+    el.value = before + after;
+    el.setSelectionRange(start, start);
+  } else if (start > 0) {
+    const before = el.value.slice(0, start - 1);
+    const after = el.value.slice(start);
+    el.value = before + after;
+    el.setSelectionRange(start - 1, start - 1);
+  }
+  el.focus();
+  el.setAttribute("readonly", true);
+}
+
+document.getElementById('btnClear').onclick = () => {
+  inKaithi.removeAttribute("readonly");
+  inKaithi.value = ""; 
+  sync(); 
+  inKaithi.focus();
+  inKaithi.setAttribute("readonly", !systemKeyboardEnabled);
+};
+document.getElementById('btnCopy').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(outHindi.value);
+    alert("Hindi text copied!");
+  } catch (e) {
+    outHindi.select(); document.execCommand('copy');
+    alert("Copied (fallback).");
+  }
+};
+
+// toggle button
+document.getElementById('btnToggle').onclick = () => {
+  systemKeyboardEnabled = !systemKeyboardEnabled;
+  if (systemKeyboardEnabled) {
+    inKaithi.removeAttribute("readonly");
+    inKaithi.setAttribute("inputmode", "text");
+    document.getElementById('btnToggle').textContent = "Disable Typing";
+  } else {
+    inKaithi.setAttribute("readonly", true);
+    inKaithi.setAttribute("inputmode", "none");
+    document.getElementById('btnToggle').textContent = "Enable Typing";
+  }
+};
+
+sync();
+</script>
+</body>
+<style>html{
+ color:darkviolet;
+ font-size:25px;
+ font-weight:600;
+}
+</style><script>/*Here write your javascript code*/</script></html>
